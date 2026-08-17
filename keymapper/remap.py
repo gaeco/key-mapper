@@ -72,6 +72,33 @@ class Rule:
         )
 
 
+@dataclass(frozen=True)
+class Hotkey:
+    """A chord that toggles remapping off and on.
+
+    Matched strictly: the significant modifiers must be *exactly* `flags`, so
+    Ctrl+Opt+Shift+P fires while Ctrl+Opt+Shift+Cmd+P does not. Lenient matching
+    would be wrong here for a reason it is not wrong for a `Rule` -- the tap
+    swallows this chord rather than passing it on, so a hotkey that fired on any
+    superset of itself would make every such chord untypeable.
+
+    Caps lock, fn and numeric-pad bits are ignored, as everywhere else.
+    """
+
+    keycode: int
+    flags: int
+
+    def matches(self, event_type: int, keycode: int, flags: int) -> bool:
+        if event_type not in REMAPPABLE_EVENTS:
+            return False
+        if keycode != self.keycode:
+            return False
+        return flags & SIGNIFICANT_FLAGS == self.flags & SIGNIFICANT_FLAGS
+
+    def describe(self) -> str:
+        return f"{describe_flags(self.flags)}+{key_name(self.keycode)}"
+
+
 class Ruleset:
     """An ordered collection of rules; first match wins."""
 

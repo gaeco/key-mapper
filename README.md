@@ -110,9 +110,24 @@ Stop with Ctrl-C.
 - `strict_modifiers` — `false` (default) lets `Ctrl+Shift+C` convert and keep its
   Shift, matching Karabiner's `"optional": ["any"]`
 - `[[mapping]]` — delete an entry to stop remapping that key
+- `[pause_hotkey]` — the pause toggle, `Ctrl+Opt+Shift+P` by default; set
+  `enabled = false` to remove it
 
 Mappings are not restricted to Ctrl→Cmd; any modifier pair works, as long as the
 key itself is unchanged. Swapping `from` and `to` reverses the direction.
+
+## Pausing
+
+`Ctrl+Opt+Shift+P` pauses all remapping; pressing it again resumes. While paused
+every key passes through untouched, so you get native behaviour back — useful for
+a shell session that needs its real `Ctrl+C` — without stopping the process and
+re-granting anything.
+
+The chord is swallowed, so the frontmost app never sees it, and it is *not*
+subject to `source_filter`: it works from the MacBook's own keyboard as well as
+from the NoMachine client. It matches strictly, so `Cmd+Ctrl+Opt+Shift+P` is left
+alone. Each toggle logs `PAUSED` / `RESUMED` to stderr, which is the only
+indication of state — there is no menu bar item.
 
 ## Behaviour and limitations
 

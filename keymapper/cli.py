@@ -31,6 +31,7 @@ def _cmd_run(args) -> int:
         tap_location=args.tap or cfg.tap_location,
         dry_run=args.dry_run,
         verbose=args.verbose,
+        pause_hotkey=cfg.pause_hotkey,
     )
     return remapper.run()
 
@@ -134,6 +135,10 @@ def _cmd_doctor(args) -> int:
         print(f"config            : {len(cfg.ruleset)} rules, filter={cfg.source_filter}")
         for rule in cfg.ruleset.rules:
             print(f"                    {rule.describe()}")
+        hotkey = cfg.pause_hotkey
+        print(
+            f"pause toggle      : {hotkey.describe() if hotkey else 'disabled'}"
+        )
     except ConfigError as exc:
         print(f"config            : ERROR {exc}")
         ok = False

@@ -24,6 +24,19 @@ pid_cache_ttl_seconds = 30.0
 # true:  the chord must be exactly the "from" modifier and nothing else.
 strict_modifiers = false
 
+# A chord that pauses and resumes all remapping. Press once to pause (every key
+# passes through untouched), press again to resume. It is swallowed rather than
+# forwarded, so the frontmost app never sees it -- pick something no app needs.
+#
+# The chord must include at least one modifier, and matches strictly: exactly
+# these modifiers and no others. It is not filtered by `source_filter`, so it
+# works from the local keyboard as well as from the NoMachine client.
+#
+# Set `enabled = false` to remove it entirely.
+[pause_hotkey]
+key = "p"
+modifiers = ["control", "option", "shift"]
+
 # The mappings. Each rewrites the modifier while keeping the same key.
 # Ctrl+<key> pressed on the NoMachine client arrives at macOS as Cmd+<key>.
 #
@@ -58,6 +71,16 @@ to = "command"
 
 [[mapping]]
 key = "s"
+from = "control"
+to = "command"
+
+[[mapping]]
+key = "n"
+from = "control"
+to = "command"
+
+[[mapping]]
+key = "t"
 from = "control"
 to = "command"
 

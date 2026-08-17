@@ -20,12 +20,13 @@ from keymapper.keycodes import (
     VK_A,
     VK_B,
     VK_C,
+    VK_P,
     VK_Q,
     VK_V,
     VK_X,
     VK_Z,
 )
-from keymapper.remap import Rule, Ruleset
+from keymapper.remap import Hotkey, Rule, Ruleset
 
 MAPPED_KEYS = [VK_C, VK_V, VK_A, VK_Z, VK_X]
 
@@ -149,3 +150,56 @@ def test_describe_is_readable():
 
 def test_empty_ruleset_is_inert():
     assert Ruleset([]).decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL) is None
+
+
+# --- the pause hotkey -----------------------------------------------------
+
+PAUSE_FLAGS = FLAG_CONTROL | FLAG_ALTERNATE | FLAG_SHIFT
+
+
+def pause_hotkey() -> Hotkey:
+    """The shipped default: ctrl+opt+shift+p."""
+    return Hotkey(keycode=VK_P, flags=PAUSE_FLAGS)
+
+
+@pytest.mark.parametrize("event_type", [EVENT_KEY_DOWN, EVENT_KEY_UP])
+def test_hotkey_matches_its_chord(event_type):
+    """Both halves match, so the tap can swallow the press and the release."""
+    assert pause_hotkey().matches(event_type, VK_P, PAUSE_FLAGS)
+
+
+def test_hotkey_ignores_other_keys():
+    assert not pause_hotkey().matches(EVENT_KEY_DOWN, VK_C, PAUSE_FLAGS)
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        0,
+        FLAG_CONTROL,
+        FLAG_CONTROL | FLAG_SHIFT,
+        FLAG_CONTROL | FLAG_ALTERNATE,
+        FLAG_ALTERNATE | FLAG_SHIFT,
+    ],
+)
+def test_hotkey_rejects_partial_chords(flags):
+    assert not pause_hotkey().matches(EVENT_KEY_DOWN, VK_P, flags)
+
+
+def test_hotkey_rejects_supersets():
+    """Strict by design: a swallowed chord must not eat cmd+ctrl+opt+shift+p."""
+    assert not pause_hotkey().matches(EVENT_KEY_DOWN, VK_P, PAUSE_FLAGS | FLAG_COMMAND)
+
+
+@pytest.mark.parametrize("noise", [FLAG_ALPHA_SHIFT, FLAG_SECONDARY_FN])
+def test_hotkey_ignores_insignificant_flags(noise):
+    """Caps lock or fn being set must not stop the toggle firing."""
+    assert pause_hotkey().matches(EVENT_KEY_DOWN, VK_P, PAUSE_FLAGS | noise)
+
+
+def test_hotkey_ignores_flags_changed():
+    assert not pause_hotkey().matches(EVENT_FLAGS_CHANGED, VK_P, PAUSE_FLAGS)
+
+
+def test_hotkey_describe_is_readable():
+    assert pause_hotkey().describe() == "shift+ctrl+opt+p"

@@ -5,8 +5,8 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-from .keycodes import FLAG_NAMES, KEY_NAMES
-from .remap import Rule, Ruleset
+from .keycodes import FLAG_NAMES, KEY_NAMES, SIGNIFICANT_FLAGS
+from .remap import Hotkey, Rule, Ruleset
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.toml"
 
@@ -14,6 +14,12 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.toml"
 DEFAULT_MAPPINGS = [
     {"key": key, "from": "control", "to": "command"} for key in ("c", "v", "a", "z", "x")
 ]
+
+#: The pause toggle, used when config.toml has no [pause_hotkey] section.
+DEFAULT_PAUSE_HOTKEY = {
+    "key": "p",
+    "modifiers": ["control", "option", "shift"],
+}
 
 
 class ConfigError(Exception):
@@ -47,6 +53,39 @@ def _parse_key(value: str, where: str) -> int:
     return code
 
 
+def build_hotkey(raw: object, where: str = "[pause_hotkey]") -> Hotkey | None:
+    """Build the pause hotkey, or None when it is disabled.
+
+    Requires at least one modifier: the tap swallows this chord, so a bare
+    letter would silently eat that key everywhere.
+    """
+    if raw is None:
+        raw = DEFAULT_PAUSE_HOTKEY
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where}: expected a table")
+    if not raw.get("enabled", True):
+        return None
+    if "key" not in raw:
+        raise ConfigError(f"{where}: missing key")
+    modifiers = raw.get("modifiers", [])
+    if isinstance(modifiers, str):
+        modifiers = [modifiers]
+    if not isinstance(modifiers, list):
+        raise ConfigError(f"{where}: modifiers must be a list of strings")
+    flags = 0
+    for name in modifiers:
+        if not isinstance(name, str):
+            raise ConfigError(f"{where}: modifiers must be a list of strings")
+        flags |= _parse_modifier(name, where)
+    if not flags & SIGNIFICANT_FLAGS:
+        raise ConfigError(
+            f"{where}: needs at least one of shift/control/option/command --"
+            " the hotkey is swallowed, so an unmodified key would be eaten"
+            " every time you typed it. Use enabled = false to switch it off."
+        )
+    return Hotkey(keycode=_parse_key(raw["key"], where), flags=flags)
+
+
 class Config:
     def __init__(
         self,
@@ -54,11 +93,13 @@ class Config:
         source_filter: str = "nomachine",
         tap_location: str = "session",
         cache_ttl: float = 30.0,
+        pause_hotkey: Hotkey | None = None,
     ) -> None:
         self.ruleset = ruleset
         self.source_filter = source_filter
         self.tap_location = tap_location
         self.cache_ttl = cache_ttl
+        self.pause_hotkey = pause_hotkey
 
 
 def build_ruleset(mappings: list[dict], strict: bool = False) -> Ruleset:
@@ -91,7 +132,10 @@ def load(path: Path | None = None) -> Config:
     """Read config from `path`, falling back to built-in defaults if absent."""
     path = path or DEFAULT_CONFIG_PATH
     if not path.exists():
-        return Config(ruleset=build_ruleset(DEFAULT_MAPPINGS))
+        return Config(
+            ruleset=build_ruleset(DEFAULT_MAPPINGS),
+            pause_hotkey=build_hotkey(None),
+        )
     try:
         with path.open("rb") as fh:
             raw = tomllib.load(fh)
@@ -112,4 +156,5 @@ def load(path: Path | None = None) -> Config:
         source_filter=source_filter,
         tap_location=tap_location,
         cache_ttl=float(raw.get("pid_cache_ttl_seconds", 30.0)),
+        pause_hotkey=build_hotkey(raw.get("pause_hotkey")),
     )

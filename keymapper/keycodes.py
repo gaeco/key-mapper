@@ -17,6 +17,9 @@ VK_C = 0x08
 VK_V = 0x09
 VK_B = 0x0B
 VK_Q = 0x0C
+VK_T = 0x11
+VK_P = 0x23
+VK_N = 0x2D
 VK_SPACE = 0x31  # kVK_Space -- not an ANSI letter, hence out of sequence here.
 
 #: Human-readable name -> virtual keycode, for parsing config.toml.
@@ -30,6 +33,9 @@ KEY_NAMES: dict[str, int] = {
     "v": VK_V,
     "b": VK_B,
     "q": VK_Q,
+    "t": VK_T,
+    "p": VK_P,
+    "n": VK_N,
     "space": VK_SPACE,
 }
 

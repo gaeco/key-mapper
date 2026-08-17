@@ -21,7 +21,7 @@ from CoreFoundation import (
 
 from . import permissions
 from .keycodes import describe_flags, event_name, key_name
-from .remap import Ruleset
+from .remap import Hotkey, Ruleset
 from .runloop import run_until_interrupted
 from .source import SourceClassifier
 
@@ -48,6 +48,7 @@ class Remapper:
         tap_location: str = "session",
         dry_run: bool = False,
         verbose: bool = False,
+        pause_hotkey: Hotkey | None = None,
     ) -> None:
         if tap_location not in TAP_LOCATIONS:
             raise ValueError(
@@ -59,18 +60,49 @@ class Remapper:
         self.tap_location = tap_location
         self.dry_run = dry_run
         self.verbose = verbose
+        self.pause_hotkey = pause_hotkey
 
         # Precomputed so the hot path can reject most events with one set lookup.
         self._watched_keycodes = ruleset.keycodes()
 
+        self.paused = False
         self.remapped = 0
         self.skipped_source = 0
+        self.skipped_paused = 0
+        self.toggles = 0
         self.tap_reenables = 0
 
         self._tap = None
         self._source = None
         self._handler = None  # pyobjc does not retain the callable
         self._loop = None
+
+    # -- pause toggle -----------------------------------------------------
+    def _toggle(self, event_type, event):
+        """Flip the pause flag and swallow the hotkey.
+
+        Returning None deletes the event, so the frontmost app never sees the
+        chord -- otherwise the toggle would double as whatever Ctrl+Opt+Shift+P
+        means in that app. Both keyDown and keyUp are swallowed, so no app is
+        left with a half-open chord.
+
+        Only keyDown flips the state: acting on keyUp as well would toggle twice
+        per press and land back where it started. Auto-repeat is swallowed but
+        ignored, so holding the chord down does not thrash the flag.
+
+        A listen-only tap (`--dry-run`) cannot delete events, so there the chord
+        still reaches the app. The toggle itself works either way.
+        """
+        if event_type == Quartz.kCGEventKeyDown:
+            repeat = Quartz.CGEventGetIntegerValueField(
+                event, Quartz.kCGKeyboardEventAutorepeat
+            )
+            if not repeat:
+                self.paused = not self.paused
+                self.toggles += 1
+                state = "PAUSED -- passing every key through" if self.paused else "RESUMED"
+                print(f"\n  {state}\n", file=sys.stderr, flush=True)
+        return None
 
     # -- hot path ---------------------------------------------------------
     def _handle(self, proxy, event_type, event, refcon):
@@ -98,6 +130,21 @@ class Remapper:
         keycode = Quartz.CGEventGetIntegerValueField(
             event, Quartz.kCGKeyboardEventKeycode
         )
+
+        # The toggle is checked before the watched-keycode reject (its key is not
+        # one we remap) and before the pause check (otherwise pausing could never
+        # be undone). Deliberately not subject to the source filter: it is a
+        # control surface for whoever is at a keyboard, local or remote.
+        if self.pause_hotkey is not None and keycode == self.pause_hotkey.keycode:
+            flags = Quartz.CGEventGetFlags(event)
+            if self.pause_hotkey.matches(event_type, keycode, flags):
+                return self._toggle(event_type, event)
+
+        if self.paused:
+            if keycode in self._watched_keycodes:
+                self.skipped_paused += 1
+            return event
+
         if keycode not in self._watched_keycodes:
             return event
 
@@ -221,6 +268,12 @@ class Remapper:
         )
         for rule in self.ruleset.rules:
             print(f"  {rule.describe()}", file=sys.stderr)
+        if self.pause_hotkey is not None:
+            print(
+                f"pause toggle: {self.pause_hotkey.describe()}"
+                " (swallowed, works from any keyboard)",
+                file=sys.stderr,
+            )
         print("Press Ctrl-C to stop.\n", file=sys.stderr)
 
         started = time.monotonic()
@@ -230,6 +283,8 @@ class Remapper:
             f"\nstopped ({reason}) after {elapsed:.0f}s -- "
             f"remapped={self.remapped} "
             f"skipped_wrong_source={self.skipped_source} "
+            f"skipped_while_paused={self.skipped_paused} "
+            f"pause_toggles={self.toggles} "
             f"tap_reenables={self.tap_reenables}",
             file=sys.stderr,
         )

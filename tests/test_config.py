@@ -4,8 +4,21 @@ from __future__ import annotations
 
 import pytest
 
-from keymapper.config import DEFAULT_MAPPINGS, ConfigError, build_ruleset, load
-from keymapper.keycodes import FLAG_COMMAND, FLAG_CONTROL, FLAG_SHIFT, VK_C
+from keymapper.config import (
+    DEFAULT_MAPPINGS,
+    ConfigError,
+    build_hotkey,
+    build_ruleset,
+    load,
+)
+from keymapper.keycodes import (
+    FLAG_ALTERNATE,
+    FLAG_COMMAND,
+    FLAG_CONTROL,
+    FLAG_SHIFT,
+    VK_C,
+    VK_P,
+)
 from keymapper.remap import Ruleset
 
 
@@ -125,9 +138,9 @@ def test_invalid_toml_reports_path(tmp_path):
 
 
 def test_shipped_config_is_valid():
-    """The config.toml we ship must parse and produce the intended 7 rules."""
+    """The config.toml we ship must parse and produce the intended 9 rules."""
     cfg = load()
-    assert len(cfg.ruleset) == 7
+    assert len(cfg.ruleset) == 9
     assert cfg.source_filter == "nomachine"
     assert isinstance(cfg.ruleset, Ruleset)
     assert {rule.describe() for rule in cfg.ruleset.rules} == {
@@ -137,5 +150,72 @@ def test_shipped_config_is_valid():
         "ctrl+z -> cmd+z",
         "ctrl+x -> cmd+x",
         "ctrl+s -> cmd+s",
+        "ctrl+n -> cmd+n",
+        "ctrl+t -> cmd+t",
         "ctrl+space -> cmd+space",
     }
+    assert cfg.pause_hotkey is not None
+    assert cfg.pause_hotkey.describe() == "shift+ctrl+opt+p"
+
+
+# --- the pause hotkey -----------------------------------------------------
+
+
+def test_default_hotkey_is_ctrl_opt_shift_p():
+    hotkey = build_hotkey(None)
+    assert hotkey is not None
+    assert hotkey.keycode == VK_P
+    assert hotkey.flags == FLAG_CONTROL | FLAG_ALTERNATE | FLAG_SHIFT
+
+
+def test_hotkey_can_be_disabled():
+    assert build_hotkey({"enabled": False, "key": "p", "modifiers": ["control"]}) is None
+
+
+def test_hotkey_accepts_a_bare_modifier_string():
+    hotkey = build_hotkey({"key": "p", "modifiers": "cmd"})
+    assert hotkey is not None and hotkey.flags == FLAG_COMMAND
+
+
+def test_hotkey_requires_a_modifier():
+    """A swallowed bare letter would silently eat that key everywhere."""
+    with pytest.raises(ConfigError, match="at least one"):
+        build_hotkey({"key": "p"})
+    with pytest.raises(ConfigError, match="at least one"):
+        build_hotkey({"key": "p", "modifiers": ["capslock"]})
+
+
+def test_hotkey_rejects_unknown_modifier():
+    with pytest.raises(ConfigError, match="unknown modifier"):
+        build_hotkey({"key": "p", "modifiers": ["hyper"]})
+
+
+def test_hotkey_rejects_missing_key():
+    with pytest.raises(ConfigError, match="missing key"):
+        build_hotkey({"modifiers": ["control"]})
+
+
+def test_hotkey_rejects_wrong_shape():
+    with pytest.raises(ConfigError, match="expected a table"):
+        build_hotkey(["control", "p"])
+    with pytest.raises(ConfigError, match="modifiers must be"):
+        build_hotkey({"key": "p", "modifiers": 3})
+
+
+def test_hotkey_from_file(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[[mapping]]\nkey = "c"\nfrom = "control"\nto = "command"\n'
+        '[pause_hotkey]\nkey = "q"\nmodifiers = ["command", "shift"]\n'
+    )
+    cfg = load(path)
+    assert cfg.pause_hotkey is not None
+    assert cfg.pause_hotkey.describe() == "shift+cmd+q"
+
+
+def test_missing_hotkey_section_falls_back_to_default(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('[[mapping]]\nkey = "c"\nfrom = "control"\nto = "command"\n')
+    cfg = load(path)
+    assert cfg.pause_hotkey is not None
+    assert cfg.pause_hotkey.keycode == VK_P
