@@ -1,0 +1,57 @@
+# keymapper configuration
+
+# Which events to rewrite, by origin:
+#   "nomachine" -- only keys injected by a NoMachine process (nxnode et al).
+#                  The local MacBook keyboard keeps native macOS behaviour.
+#   "synthetic" -- any key not coming from real hardware. Broader: catches
+#                  NoMachine, but also osascript, other automation, etc.
+#   "all"       -- every key, whatever its origin.
+#
+# Run `keymapper probe` to confirm which of these your setup can actually
+# distinguish before relying on "nomachine".
+source_filter = "nomachine"
+
+# Where to install the tap. "session" is correct for normal use. "hid" sits
+# earlier in the pipeline but generally needs root. Change only if the probe
+# shows NoMachine events are invisible at the session tap.
+tap_location = "session"
+
+# nxnode's pid changes on every reconnect, so pid->origin lookups expire.
+pid_cache_ttl_seconds = 30.0
+
+# false: extra modifiers are tolerated, so Ctrl+Shift+C also converts (and keeps
+#        its Shift). This matches Karabiner's `"optional": ["any"]`.
+# true:  the chord must be exactly the "from" modifier and nothing else.
+strict_modifiers = false
+
+# The mappings. Each rewrites the modifier while keeping the same key.
+# Ctrl+<key> pressed on the NoMachine client arrives at macOS as Cmd+<key>.
+#
+# Delete or comment out any line you don't want. Note that a converted key loses
+# its terminal meaning for the remote client: Ctrl+C no longer sends SIGINT and
+# Ctrl+Z no longer suspends, since macOS now sees Cmd+C / Cmd+Z. Drop those two
+# entries if you need them inside a shell.
+[[mapping]]
+key = "c"
+from = "control"
+to = "command"
+
+[[mapping]]
+key = "v"
+from = "control"
+to = "command"
+
+[[mapping]]
+key = "a"
+from = "control"
+to = "command"
+
+[[mapping]]
+key = "z"
+from = "control"
+to = "command"
+
+[[mapping]]
+key = "x"
+from = "control"
+to = "command"

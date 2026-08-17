@@ -1,0 +1,193 @@
+# key-mapper
+
+Remap `Ctrl+C/V/A/Z/X` to `Cmd+C/V/A/Z/X` on macOS, for keystrokes arriving from
+a **NoMachine** client — leaving the Mac's own keyboard untouched.
+
+So pressing `Ctrl+C` on the client keyboard produces a `Cmd+C` event on macOS,
+and copy/paste work with the muscle memory the client keyboard was built for.
+
+Setup this was built for:
+
+| | |
+|---|---|
+| NoMachine server | macOS 15.7.3 (this machine) |
+| NoMachine client | Galaxy S22 Ultra, Android 16 / One UI 8.0, Samsung DeX |
+
+## Why Karabiner-Elements can't do this
+
+Karabiner is the obvious tool and it *cannot work here*, which is worth
+understanding before reaching for it again:
+
+| Layer | Sees physical keyboards | Sees NoMachine's keys |
+|---|---|---|
+| Karabiner-Elements (IOKit virtual HID driver) | yes | **no** |
+| Quartz event tap (this tool) | yes | yes |
+
+`nxnode` injects remote keystrokes as *synthetic CGEvents* — that is why
+NoMachine asks for Accessibility permission on macOS. Synthetic events never pass
+through Karabiner's HID driver, so a Karabiner rule can never match them. An
+event tap sits downstream of injection, where those events do appear.
+
+## Install
+
+```sh
+python3 -m venv .venv                 # Homebrew python is PEP 668 managed
+./.venv/bin/python -m pip install -e '.[dev]'
+```
+
+## Permissions — read this first
+
+**Two separate permissions are required, and they are easy to confuse.** Grant
+both to the app that *runs* the command (your terminal — `keymapper doctor`
+prints which one it detected), then **fully quit and reopen it**. A running
+process does not pick up a new grant.
+
+System Settings → Privacy & Security →
+
+| Permission | Why | Symptom when missing |
+|---|---|---|
+| **Input Monitoring** | see `keyDown`/`keyUp` at all | tap is created but **no keystroke ever arrives** |
+| **Accessibility** | *modify* events | events observed but rewriting silently does nothing |
+
+The Input Monitoring failure mode is genuinely deceptive, and worth spelling out
+because it cost time during development: with Accessibility but not Input
+Monitoring, `CGEventTapCreate` **succeeds** for an event mask containing
+`flagsChanged` and **fails** for a mask of only `keyDown|keyUp`. Modifier changes
+carry no typed characters so they aren't treated as keystroke capture; real keys
+are. A tap asking for all three is therefore created happily and then never
+delivers a single key — which looks exactly like "NoMachine's keys are invisible
+to event taps" and invites entirely the wrong conclusion. `keymapper doctor`
+checks Input Monitoring directly via `IOHIDCheckAccess` rather than inferring it,
+and both `probe` and `run` refuse to start without it.
+
+```sh
+./.venv/bin/keymapper doctor
+```
+
+## Usage
+
+```sh
+keymapper doctor                # permissions, NoMachine processes, config, conflicts
+keymapper probe                 # see raw events and where they came from
+keymapper run --dry-run         # log what would change, modify nothing
+keymapper run                   # the real thing
+```
+
+### `probe` — do this before trusting anything
+
+`probe` installs listen-only taps at all three tap locations and prints every key
+event with the fields revealing its origin:
+
+```
+[session] keyDown  key=  9 (   v) flags=0x00040000 (ctrl) srcPid=67161 srcState=combinedSession proc=nxnode NOMACHINE
+```
+
+Press `Ctrl+V` on the MacBook keyboard, then press it from DeX, then stop with
+Ctrl-C. (Use `Ctrl+V` rather than `Ctrl+C` for the test — `Ctrl+C` in the
+terminal running `probe` just interrupts it.) The summary groups what it saw by
+source. Two things to confirm:
+
+1. **NoMachine keys appear at all** (if not, see Fallbacks below).
+2. **`srcPid` / `srcState` differ between the two keyboards** — this is what
+   makes `source_filter = "nomachine"` possible.
+
+### `run`
+
+Logs each rewrite:
+
+```
+  remap       keyDown  ctrl+c -> cmd+c
+```
+
+Stop with Ctrl-C.
+
+## Configuration
+
+`config.toml`; every field is documented inline there.
+
+- `source_filter` — `"nomachine"` (default), `"synthetic"`, or `"all"`
+- `tap_location` — `"session"` (default), `"hid"`, `"annotatedSession"`
+- `strict_modifiers` — `false` (default) lets `Ctrl+Shift+C` convert and keep its
+  Shift, matching Karabiner's `"optional": ["any"]`
+- `[[mapping]]` — delete an entry to stop remapping that key
+
+Mappings are not restricted to Ctrl→Cmd; any modifier pair works, as long as the
+key itself is unchanged. Swapping `from` and `to` reverses the direction.
+
+## Behaviour and limitations
+
+**The converted keys lose their terminal meaning for the remote client.** Since
+macOS now sees `Cmd+<key>`, a `Ctrl+C` from the client no longer sends SIGINT,
+`Ctrl+Z` no longer suspends, and `Ctrl+A`/`Ctrl+X` no longer reach
+readline/tmux/nano. In exchange, `Ctrl+C`/`Ctrl+V` are copy/paste in every app.
+If you need the shell bindings back, drop those individual `[[mapping]]`
+entries — `c` and `v` alone is a reasonable setup. Local typing on the MacBook's
+own keyboard is unaffected while `source_filter = "nomachine"`.
+
+**`flagsChanged` events are passed through unmodified, by design.** Rewriting the
+Control key's own press/release would turn Control into Command *globally*, not
+just for the five mapped keys. Consequence: an app that reads modifier state from
+`flagsChanged` rather than from the `keyDown`'s own flags may still see Control.
+Most apps read the `keyDown` flags. If one app misbehaves while others are fine,
+this is the first thing to suspect.
+
+**Only the modifier is rewritten, never the keycode.** That is what lets the tap
+mutate the event in place and return it, with no `CGEventPost` re-injection —
+so there is no feedback loop and no need for loop-breaking sentinel tags.
+
+**Going deaf.** macOS disables an event tap whose callback is too slow. The
+callback re-enables itself on `kCGEventTapDisabledByTimeout`, and a health check
+every ~5s catches a tap disabled while no events are flowing; if it can't be
+revived the process exits rather than pretending to work.
+
+## Karabiner interaction
+
+Karabiner-Elements has been uninstalled, so nothing currently competes with this
+tool. Two leftovers are worth knowing about:
+
+- `~/.config/karabiner/karabiner.json` survives an uninstall, still holding the
+  old *"Command+C/V/A to Control+C/V/A"* rule and a `left_control →
+  left_command` simple modification. Config alone rewrites nothing — only
+  `karabiner_grabber` intercepts keys — so this is inert. Delete the file if you
+  don't want it reapplied should Karabiner ever be reinstalled.
+- `Karabiner-Menu`, `Karabiner-NotificationWindow`, and
+  `Karabiner-VirtualHIDDevice-Daemon` may still be running from
+  `/Library/Application Support/org.pqrs/`. They are UI and driver helpers, not
+  the key interceptor, and don't affect keystrokes.
+
+`keymapper doctor` checks whether `karabiner_grabber` is actually running: it
+reports a leftover config as an informational note and only warns (failing the
+run) when a live Karabiner profile overlaps. Two kinds of overlap count — a
+complex rule mentioning Command, and any simple modification involving Control or
+Command, since a `left_control → left_command` mapping does at the HID layer what
+this tool does at the session tap.
+
+If Karabiner is ever reinstalled, note that a rule pointing the opposite way
+(`Cmd→Ctrl`) is harmless while `source_filter = "nomachine"` — neither sees the
+other's events — but under `source_filter = "all"` the two fight: Karabiner
+rewrites a local `Cmd+C` to `Ctrl+C` at the HID layer and this tool rewrites it
+back at the session tap.
+
+## Fallbacks
+
+If `probe` shows no NoMachine events at any tap location, an event tap is the
+wrong layer and the options are:
+
+1. `keymapper run --tap hid` — earlier in the pipeline; generally needs root.
+2. NoMachine **client-side** keyboard/modifier settings in the Android app.
+3. NoMachine **server-side** `node.cfg`
+   (`/Applications/NoMachine.app/Contents/Frameworks/etc/node.cfg`).
+4. Bind at the application layer — tmux `bind`, vim `map`, terminal key profiles.
+
+## Development
+
+```sh
+./.venv/bin/python -m pytest         # 73 tests
+```
+
+`remap.py` holds the transform logic and imports nothing from macOS, so it is
+tested directly. `keycodes.py` duplicates the Carbon/CoreGraphics constants for
+the same reason; the values were verified against pyobjc's own rather than
+transcribed from memory. `runloop.py` exists because `CFRunLoopRun()` parks in
+`mach_msg` and Python signal handlers never run, so Ctrl-C could not stop the
+process — it slices the loop instead, and `tests/test_runloop.py` guards that.

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "keymapper"
+version = "0.1.0"
+description = "Remap Ctrl+C/V/A/Z/X to Cmd on macOS, for keys injected by a NoMachine session"
+requires-python = ">=3.11"
+dependencies = [
+    "pyobjc-framework-Quartz>=12.2.2",
+    "pyobjc-framework-ApplicationServices>=12.2.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+keymapper = "keymapper.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["keymapper*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
