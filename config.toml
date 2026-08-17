@@ -55,3 +55,15 @@ to = "command"
 key = "x"
 from = "control"
 to = "command"
+
+[[mapping]]
+key = "s"
+from = "control"
+to = "command"
+
+# Ctrl+Space -> Cmd+Space. Cmd+Space is Spotlight, so this shadows the remote
+# client's Ctrl+Space (input-source switch / IDE completion) for mapped events.
+[[mapping]]
+key = "space"
+from = "control"
+to = "command"

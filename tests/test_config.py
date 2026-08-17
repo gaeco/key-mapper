@@ -125,8 +125,17 @@ def test_invalid_toml_reports_path(tmp_path):
 
 
 def test_shipped_config_is_valid():
-    """The config.toml we ship must parse and produce the intended 5 rules."""
+    """The config.toml we ship must parse and produce the intended 7 rules."""
     cfg = load()
-    assert len(cfg.ruleset) == 5
+    assert len(cfg.ruleset) == 7
     assert cfg.source_filter == "nomachine"
     assert isinstance(cfg.ruleset, Ruleset)
+    assert {rule.describe() for rule in cfg.ruleset.rules} == {
+        "ctrl+c -> cmd+c",
+        "ctrl+v -> cmd+v",
+        "ctrl+a -> cmd+a",
+        "ctrl+z -> cmd+z",
+        "ctrl+x -> cmd+x",
+        "ctrl+s -> cmd+s",
+        "ctrl+space -> cmd+space",
+    }
