@@ -152,7 +152,7 @@ def test_shipped_config_is_valid():
         "ctrl+s -> cmd+s",
         "ctrl+n -> cmd+n",
         "ctrl+t -> cmd+t",
-        "ctrl+space -> cmd+space",
+        "shift+space -> cmd+space",
     }
     assert cfg.pause_hotkey is not None
     assert cfg.pause_hotkey.describe() == "shift+ctrl+opt+p"

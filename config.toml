@@ -84,9 +84,12 @@ key = "t"
 from = "control"
 to = "command"
 
-# Ctrl+Space -> Cmd+Space. Cmd+Space is Spotlight, so this shadows the remote
-# client's Ctrl+Space (input-source switch / IDE completion) for mapped events.
+# Shift+Space -> Cmd+Space, the odd one out: every other rule here is Ctrl->Cmd.
+# Note that Shift+Space is an ordinary keystroke in a way Ctrl+Space is not -- it
+# types a space in most apps and pages up in a browser -- and that with
+# strict_modifiers = false, Ctrl+Shift+Space and Opt+Shift+Space convert too. Add
+# `strict = true` to this entry to fire on exactly Shift+Space and nothing else.
 [[mapping]]
 key = "space"
-from = "control"
+from = "shift"
 to = "command"
