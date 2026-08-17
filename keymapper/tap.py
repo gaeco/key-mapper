@@ -1,9 +1,10 @@
 """Event-tap lifecycle for the remapper.
 
-Installs one active tap and rewrites matching events in place. Because every
-rule preserves the keycode and only changes modifier bits, the callback can call
-`CGEventSetFlags` and return the same event -- no `CGEventPost`, therefore no
-risk of our own synthetic events re-entering our own tap.
+Installs one active tap and rewrites matching events in place. Because a rule
+only ever changes fields on the event it was handed -- modifier bits, and
+sometimes the keycode -- the callback can mutate it and return the same event.
+No `CGEventPost`, therefore no risk of our own synthetic events re-entering our
+own tap.
 """
 
 from __future__ import annotations
@@ -149,8 +150,8 @@ class Remapper:
             return event
 
         flags = Quartz.CGEventGetFlags(event)
-        new_flags = self.ruleset.decide(event_type, keycode, flags)
-        if new_flags is None:
+        change = self.ruleset.decide(event_type, keycode, flags)
+        if change is None:
             return event
 
         # Origin check is deferred until after the cheap checks pass, so the pid
@@ -179,12 +180,21 @@ class Remapper:
         print(
             f"  {arrow:11} {event_name(event_type):8} "
             f"{describe_flags(flags)}+{key_name(keycode)}"
-            f" -> {describe_flags(new_flags)}+{key_name(keycode)}",
+            f" -> {describe_flags(change.flags)}+{key_name(change.keycode)}",
             file=sys.stderr,
             flush=True,
         )
         if not self.dry_run:
-            Quartz.CGEventSetFlags(event, new_flags)
+            Quartz.CGEventSetFlags(event, change.flags)
+            if change.keycode != keycode:
+                # Both halves of the rewrite are plain fields on the event, so a
+                # key change needs no synthesised replacement either. Note that
+                # the event's unicode payload is left as it was: apps that match
+                # a shortcut on the keycode see the new key, but one reading
+                # characters would still see the old one.
+                Quartz.CGEventSetIntegerValueField(
+                    event, Quartz.kCGKeyboardEventKeycode, change.keycode
+                )
         return event
 
     # -- lifecycle --------------------------------------------------------

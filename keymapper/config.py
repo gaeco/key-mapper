@@ -115,12 +115,16 @@ def build_ruleset(mappings: list[dict], strict: bool = False) -> Ruleset:
         to_flags = _parse_modifier(entry["to"], where)
         if from_flags == to_flags:
             raise ConfigError(f"{where}: 'from' and 'to' are the same modifier")
+        to_key = entry.get("to_key")
         rules.append(
             Rule(
                 keycode=_parse_key(entry["key"], where),
                 from_flags=from_flags,
                 to_flags=to_flags,
                 strict=bool(entry.get("strict", strict)),
+                to_keycode=(
+                    None if to_key is None else _parse_key(to_key, f"{where} to_key")
+                ),
             )
         )
     if not rules:

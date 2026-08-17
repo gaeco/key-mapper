@@ -20,9 +20,15 @@ VK_Q = 0x0C
 VK_T = 0x11
 VK_P = 0x23
 VK_N = 0x2D
-VK_SPACE = 0x31  # kVK_Space -- not an ANSI letter, hence out of sequence here.
+VK_GRAVE = 0x32  # kVK_ANSI_Grave -- the ` / ~ key
+# Not ANSI keys, hence out of sequence here.
+VK_TAB = 0x30  # kVK_Tab
+VK_SPACE = 0x31  # kVK_Space
+VK_ESCAPE = 0x35  # kVK_Escape
 
 #: Human-readable name -> virtual keycode, for parsing config.toml.
+#: Aliases are allowed; since KEY_CODES inverts this map for log output, the
+#: alias listed *last* for a keycode is the one that shows up in a log line.
 KEY_NAMES: dict[str, int] = {
     "a": VK_A,
     "s": VK_S,
@@ -36,7 +42,13 @@ KEY_NAMES: dict[str, int] = {
     "t": VK_T,
     "p": VK_P,
     "n": VK_N,
+    "tab": VK_TAB,
     "space": VK_SPACE,
+    "grave": VK_GRAVE,
+    "backtick": VK_GRAVE,
+    "`": VK_GRAVE,
+    "escape": VK_ESCAPE,
+    "esc": VK_ESCAPE,
 }
 
 #: Virtual keycode -> name, for log output.

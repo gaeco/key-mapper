@@ -20,13 +20,15 @@ from keymapper.keycodes import (
     VK_A,
     VK_B,
     VK_C,
+    VK_ESCAPE,
+    VK_GRAVE,
     VK_P,
     VK_Q,
     VK_V,
     VK_X,
     VK_Z,
 )
-from keymapper.remap import Hotkey, Rule, Ruleset
+from keymapper.remap import Change, Hotkey, Rule, Ruleset
 
 MAPPED_KEYS = [VK_C, VK_V, VK_A, VK_Z, VK_X]
 
@@ -48,15 +50,17 @@ def ctrl_to_cmd(strict: bool = False) -> Ruleset:
 @pytest.mark.parametrize("event_type", [EVENT_KEY_DOWN, EVENT_KEY_UP])
 def test_control_becomes_command(keycode, event_type):
     """All five combos convert, on both press and release."""
-    assert ctrl_to_cmd().decide(event_type, keycode, FLAG_CONTROL) == FLAG_COMMAND
+    assert ctrl_to_cmd().decide(event_type, keycode, FLAG_CONTROL) == Change(
+        flags=FLAG_COMMAND, keycode=keycode
+    )
 
 
 @pytest.mark.parametrize("keycode", MAPPED_KEYS)
 def test_control_bit_is_cleared_not_just_ored(keycode):
     result = ctrl_to_cmd().decide(EVENT_KEY_DOWN, keycode, FLAG_CONTROL)
     assert result is not None
-    assert not result & FLAG_CONTROL, "control bit must be removed, not left set"
-    assert result & FLAG_COMMAND
+    assert not result.flags & FLAG_CONTROL, "control bit must be removed, not left set"
+    assert result.flags & FLAG_COMMAND
 
 
 # --- pass-through cases ---------------------------------------------------
@@ -98,17 +102,17 @@ def test_unknown_event_type_untouched():
 def test_lenient_allows_extra_modifiers():
     """Mirrors Karabiner's optional:[any] -- ctrl+shift+c still converts."""
     rs = ctrl_to_cmd(strict=False)
-    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL | FLAG_SHIFT) == (
-        FLAG_COMMAND | FLAG_SHIFT
+    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL | FLAG_SHIFT) == Change(
+        flags=FLAG_COMMAND | FLAG_SHIFT, keycode=VK_C
     ), "the extra shift must survive the rewrite"
-    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL | FLAG_ALTERNATE) == (
-        FLAG_COMMAND | FLAG_ALTERNATE
+    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL | FLAG_ALTERNATE) == Change(
+        flags=FLAG_COMMAND | FLAG_ALTERNATE, keycode=VK_C
     )
 
 
 def test_strict_rejects_extra_modifiers():
     rs = ctrl_to_cmd(strict=True)
-    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL) == FLAG_COMMAND
+    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL) == Change(FLAG_COMMAND, VK_C)
     assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL | FLAG_SHIFT) is None
 
 
@@ -117,7 +121,9 @@ def test_strict_ignores_insignificant_flags(noise):
     """Caps lock and fn are incidental and must not defeat a strict match."""
     rs = ctrl_to_cmd(strict=True)
     result = rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL | noise)
-    assert result == FLAG_COMMAND | noise, "incidental bit should be preserved"
+    assert result == Change(
+        flags=FLAG_COMMAND | noise, keycode=VK_C
+    ), "incidental bit should be preserved"
 
 
 # --- ruleset plumbing ----------------------------------------------------
@@ -134,7 +140,7 @@ def test_first_match_wins():
             Rule(VK_C, FLAG_CONTROL, FLAG_ALTERNATE),
         ]
     )
-    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL) == FLAG_COMMAND
+    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL) == Change(FLAG_COMMAND, VK_C)
 
 
 def test_matching_rule_reports_the_rule():
@@ -150,6 +156,78 @@ def test_describe_is_readable():
 
 def test_empty_ruleset_is_inert():
     assert Ruleset([]).decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL) is None
+
+
+# --- rewriting the key as well as the modifier ----------------------------
+
+
+def esc_to_grave() -> Ruleset:
+    """The shipped ctrl+esc -> cmd+` rule."""
+    return Ruleset(
+        [
+            Rule(
+                keycode=VK_ESCAPE,
+                from_flags=FLAG_CONTROL,
+                to_flags=FLAG_COMMAND,
+                to_keycode=VK_GRAVE,
+            )
+        ]
+    )
+
+
+@pytest.mark.parametrize("event_type", [EVENT_KEY_DOWN, EVENT_KEY_UP])
+def test_key_is_rewritten_with_the_modifier(event_type):
+    assert esc_to_grave().decide(event_type, VK_ESCAPE, FLAG_CONTROL) == Change(
+        flags=FLAG_COMMAND, keycode=VK_GRAVE
+    )
+
+
+def test_key_rewrite_keeps_extra_modifiers():
+    assert esc_to_grave().decide(EVENT_KEY_DOWN, VK_ESCAPE, FLAG_CONTROL | FLAG_SHIFT) == (
+        Change(flags=FLAG_COMMAND | FLAG_SHIFT, keycode=VK_GRAVE)
+    )
+
+
+def test_key_rewrite_still_matches_on_the_source_key():
+    """The rule fires on esc, not on the ` it produces."""
+    rs = esc_to_grave()
+    assert rs.decide(EVENT_KEY_DOWN, VK_GRAVE, FLAG_CONTROL) is None
+    assert rs.keycodes() == frozenset({VK_ESCAPE})
+
+
+def test_unset_to_keycode_keeps_the_key():
+    rule = Rule(VK_C, FLAG_CONTROL, FLAG_COMMAND)
+    assert rule.to_keycode is None
+    assert rule.target_keycode == VK_C
+    assert rule.apply(FLAG_CONTROL) == Change(flags=FLAG_COMMAND, keycode=VK_C)
+
+
+def test_key_rewrite_fires_even_when_target_modifier_is_held():
+    """Cmd already down does not mean the job is done -- the key is still esc."""
+    assert esc_to_grave().decide(
+        EVENT_KEY_DOWN, VK_ESCAPE, FLAG_CONTROL | FLAG_COMMAND
+    ) == Change(flags=FLAG_COMMAND, keycode=VK_GRAVE)
+
+
+def test_key_rewrite_describe_shows_both_keys():
+    assert esc_to_grave().rules[0].describe() == "ctrl+esc -> cmd+`"
+
+
+def test_key_only_rewrite_is_not_a_no_op():
+    """Same modifier, different key: the change must survive the no-op guard."""
+    rs = Ruleset(
+        [
+            Rule(
+                keycode=VK_ESCAPE,
+                from_flags=FLAG_CONTROL,
+                to_flags=FLAG_CONTROL,
+                to_keycode=VK_GRAVE,
+            )
+        ]
+    )
+    assert rs.decide(EVENT_KEY_DOWN, VK_ESCAPE, FLAG_CONTROL) == Change(
+        flags=FLAG_CONTROL, keycode=VK_GRAVE
+    )
 
 
 # --- the pause hotkey -----------------------------------------------------

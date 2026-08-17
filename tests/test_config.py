@@ -17,6 +17,8 @@ from keymapper.keycodes import (
     FLAG_CONTROL,
     FLAG_SHIFT,
     VK_C,
+    VK_ESCAPE,
+    VK_GRAVE,
     VK_P,
 )
 from keymapper.remap import Ruleset
@@ -40,6 +42,32 @@ def test_modifier_aliases_accepted():
 def test_numeric_keycode_accepted():
     rs = build_ruleset([{"key": "0x08", "from": "command", "to": "control"}])
     assert rs.rules[0].keycode == VK_C
+
+
+def test_to_key_rewrites_the_key():
+    rs = build_ruleset(
+        [{"key": "esc", "to_key": "`", "from": "control", "to": "command"}]
+    )
+    assert rs.rules[0].keycode == VK_ESCAPE
+    assert rs.rules[0].to_keycode == VK_GRAVE
+    assert rs.rules[0].describe() == "ctrl+esc -> cmd+`"
+
+
+def test_to_key_defaults_to_keeping_the_key():
+    rs = build_ruleset([{"key": "c", "from": "control", "to": "command"}])
+    assert rs.rules[0].to_keycode is None
+
+
+def test_to_key_accepts_a_numeric_keycode():
+    rs = build_ruleset(
+        [{"key": "esc", "to_key": "0x32", "from": "control", "to": "command"}]
+    )
+    assert rs.rules[0].to_keycode == VK_GRAVE
+
+
+def test_to_key_rejects_an_unknown_key():
+    with pytest.raises(ConfigError, match="to_key: unknown key"):
+        build_ruleset([{"key": "esc", "to_key": "nope", "from": "ctrl", "to": "cmd"}])
 
 
 def test_strict_flag_per_mapping_overrides_global():
@@ -138,9 +166,9 @@ def test_invalid_toml_reports_path(tmp_path):
 
 
 def test_shipped_config_is_valid():
-    """The config.toml we ship must parse and produce the intended 9 rules."""
+    """The config.toml we ship must parse and produce the intended 11 rules."""
     cfg = load()
-    assert len(cfg.ruleset) == 9
+    assert len(cfg.ruleset) == 11
     assert cfg.source_filter == "nomachine"
     assert isinstance(cfg.ruleset, Ruleset)
     assert {rule.describe() for rule in cfg.ruleset.rules} == {
@@ -153,6 +181,8 @@ def test_shipped_config_is_valid():
         "ctrl+n -> cmd+n",
         "ctrl+t -> cmd+t",
         "shift+space -> cmd+space",
+        "ctrl+tab -> cmd+tab",
+        "ctrl+esc -> cmd+`",
     }
     assert cfg.pause_hotkey is not None
     assert cfg.pause_hotkey.describe() == "shift+ctrl+opt+p"
