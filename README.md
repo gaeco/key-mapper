@@ -109,12 +109,19 @@ Stop with Ctrl-C.
 - `tap_location` — `"session"` (default), `"hid"`, `"annotatedSession"`
 - `strict_modifiers` — `false` (default) lets `Ctrl+Shift+C` convert and keep its
   Shift, matching Karabiner's `"optional": ["any"]`
-- `[[mapping]]` — delete an entry to stop remapping that key
+- `[[mapping]]` — the rules, in priority order; first match wins
 - `[pause_hotkey]` — the pause toggle, `Ctrl+Opt+Shift+P` by default; set
   `enabled = false` to remove it
 
-Mappings are not restricted to Ctrl→Cmd; any modifier pair works, as long as the
-key itself is unchanged. Swapping `from` and `to` reverses the direction.
+A mapping's `key` may be `"any"`, which matches every keycode. That is how the
+shipped config converts the whole Control layer in one rule rather than listing
+keys one at a time. Because the first matching rule wins, an exception to the
+catch-all is just a rule placed above it — which is how `Ctrl+Esc → Cmd+\``
+survives.
+
+Mappings are not restricted to Ctrl→Cmd: any modifier pair works, and swapping
+`from` and `to` reverses the direction. `to_key` additionally rewrites the key
+itself, so a chord with no counterpart on the other side can still be expressed.
 
 ## Pausing
 
@@ -131,18 +138,26 @@ indication of state — there is no menu bar item.
 
 ## Behaviour and limitations
 
-**The converted keys lose their terminal meaning for the remote client.** Since
-macOS now sees `Cmd+<key>`, a `Ctrl+C` from the client no longer sends SIGINT,
-`Ctrl+Z` no longer suspends, and `Ctrl+A`/`Ctrl+X` no longer reach
-readline/tmux/nano. In exchange, `Ctrl+C`/`Ctrl+V` are copy/paste in every app.
-If you need the shell bindings back, drop those individual `[[mapping]]`
-entries — `c` and `v` alone is a reasonable setup. Local typing on the MacBook's
-own keyboard is unaffected while `source_filter = "nomachine"`.
+**The entire Control layer loses its terminal meaning for the remote client.**
+This is the cost of the catch-all, and it is bigger than it was when only five
+keys converted. Since macOS now sees `Cmd+<key>` for every Control chord, a shell
+inside the session loses `Ctrl+C` (SIGINT), `Ctrl+D` (EOF), `Ctrl+Z` (suspend),
+and `Ctrl+A`/`E`/`K`/`L`/`R`/`U`/`W` (readline), along with every tmux prefix and
+every `Ctrl` binding in vim, nano and less. In exchange every `Ctrl` shortcut you
+know from Windows or Linux works in every Mac app.
+
+The pause hotkey is the intended escape hatch: `Ctrl+Opt+Shift+P` gives the whole
+Control layer back for as long as you need it. For a permanent exception, add a
+`[[mapping]]` above the catch-all. Local typing on the MacBook's own keyboard is
+unaffected while `source_filter = "nomachine"`.
 
 **`flagsChanged` events are passed through unmodified, by design.** Rewriting the
-Control key's own press/release would turn Control into Command *globally*, not
-just for the five mapped keys. Consequence: an app that reads modifier state from
-`flagsChanged` rather than from the `keyDown`'s own flags may still see Control.
+Control key's own press/release would turn Control into Command *globally*,
+including for the local keyboard. Consequence: an app that reads modifier state
+from `flagsChanged` rather than from the `keyDown`'s own flags may still see
+Control. This is why a shortcut that needs Command genuinely *held* — the
+`Cmd+Tab` app switcher staying open to cycle through apps — does not behave as it
+would with a real Cmd.
 Most apps read the `keyDown` flags. If one app misbehaves while others are fine,
 this is the first thing to suspect.
 

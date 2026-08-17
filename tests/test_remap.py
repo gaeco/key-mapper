@@ -198,8 +198,7 @@ def test_key_rewrite_still_matches_on_the_source_key():
 def test_unset_to_keycode_keeps_the_key():
     rule = Rule(VK_C, FLAG_CONTROL, FLAG_COMMAND)
     assert rule.to_keycode is None
-    assert rule.target_keycode == VK_C
-    assert rule.apply(FLAG_CONTROL) == Change(flags=FLAG_COMMAND, keycode=VK_C)
+    assert rule.apply(VK_C, FLAG_CONTROL) == Change(flags=FLAG_COMMAND, keycode=VK_C)
 
 
 def test_key_rewrite_fires_even_when_target_modifier_is_held():
@@ -228,6 +227,92 @@ def test_key_only_rewrite_is_not_a_no_op():
     assert rs.decide(EVENT_KEY_DOWN, VK_ESCAPE, FLAG_CONTROL) == Change(
         flags=FLAG_CONTROL, keycode=VK_GRAVE
     )
+
+
+# --- the wildcard rule: convert the whole Control layer --------------------
+
+
+def any_ctrl_to_cmd(strict: bool = False) -> Ruleset:
+    """The shipped catch-all: ctrl+<anything> -> cmd+<same>."""
+    return Ruleset(
+        [Rule(None, FLAG_CONTROL, FLAG_COMMAND, strict=strict)]
+    )
+
+
+@pytest.mark.parametrize("keycode", [VK_C, VK_Q, VK_ESCAPE, VK_GRAVE, 0x7F, 0x00])
+@pytest.mark.parametrize("event_type", [EVENT_KEY_DOWN, EVENT_KEY_UP])
+def test_wildcard_converts_every_key(keycode, event_type):
+    """Including keys with no entry in the name table."""
+    assert any_ctrl_to_cmd().decide(event_type, keycode, FLAG_CONTROL) == Change(
+        flags=FLAG_COMMAND, keycode=keycode
+    )
+
+
+def test_wildcard_passes_the_matched_key_through_unchanged():
+    """The rule has no keycode of its own, so it must not invent one."""
+    for keycode in (VK_B, VK_Q, VK_ESCAPE):
+        change = any_ctrl_to_cmd().decide(EVENT_KEY_DOWN, keycode, FLAG_CONTROL)
+        assert change is not None and change.keycode == keycode
+
+
+def test_wildcard_still_requires_its_modifier():
+    """A blanket key match is not a blanket modifier match."""
+    rs = any_ctrl_to_cmd()
+    assert rs.decide(EVENT_KEY_DOWN, VK_C, 0) is None
+    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_SHIFT) is None
+    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_COMMAND) is None
+
+
+def test_wildcard_ignores_flags_changed():
+    assert any_ctrl_to_cmd().decide(EVENT_FLAGS_CHANGED, VK_C, FLAG_CONTROL) is None
+
+
+def test_wildcard_honours_strict():
+    rs = any_ctrl_to_cmd(strict=True)
+    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL) == Change(FLAG_COMMAND, VK_C)
+    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL | FLAG_SHIFT) is None
+
+
+def test_wildcard_defeats_the_keycode_early_out():
+    rs = any_ctrl_to_cmd()
+    assert rs.watches_all_keys()
+    assert rs.keycodes() == frozenset(), "nothing specific to fast-path on"
+
+
+def test_specific_rules_win_over_a_wildcard_placed_after_them():
+    """Ordering is the whole mechanism by which exceptions to the catch-all work."""
+    rs = Ruleset(
+        [
+            Rule(VK_ESCAPE, FLAG_CONTROL, FLAG_COMMAND, to_keycode=VK_GRAVE),
+            Rule(None, FLAG_CONTROL, FLAG_COMMAND),
+        ]
+    )
+    assert rs.decide(EVENT_KEY_DOWN, VK_ESCAPE, FLAG_CONTROL) == Change(
+        flags=FLAG_COMMAND, keycode=VK_GRAVE
+    ), "the esc rule must win, not the catch-all"
+    assert rs.decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL) == Change(FLAG_COMMAND, VK_C)
+
+
+def test_wildcard_placed_first_shadows_everything_after_it():
+    """The failure mode the shipped config's ordering avoids."""
+    rs = Ruleset(
+        [
+            Rule(None, FLAG_CONTROL, FLAG_COMMAND),
+            Rule(VK_ESCAPE, FLAG_CONTROL, FLAG_COMMAND, to_keycode=VK_GRAVE),
+        ]
+    )
+    assert rs.decide(EVENT_KEY_DOWN, VK_ESCAPE, FLAG_CONTROL) == Change(
+        flags=FLAG_COMMAND, keycode=VK_ESCAPE
+    ), "esc stays esc: the catch-all matched first"
+
+
+def test_wildcard_describe_is_readable():
+    assert any_ctrl_to_cmd().rules[0].describe() == "ctrl+any -> cmd+any"
+    assert any_ctrl_to_cmd().rules[0].matches_any_key
+
+
+def test_specific_rule_does_not_match_any_key():
+    assert not Rule(VK_C, FLAG_CONTROL, FLAG_COMMAND).matches_any_key
 
 
 # --- the pause hotkey -----------------------------------------------------

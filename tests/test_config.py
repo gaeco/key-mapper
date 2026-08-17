@@ -24,13 +24,13 @@ from keymapper.keycodes import (
 from keymapper.remap import Ruleset
 
 
-def test_default_mappings_cover_the_five_keys():
+def test_default_mappings_convert_the_whole_control_layer():
     rs = build_ruleset(DEFAULT_MAPPINGS)
-    assert len(rs) == 5
-    assert rs.keycodes() == frozenset({0x00, 0x06, 0x07, 0x08, 0x09})  # a z x c v
-    for rule in rs.rules:
-        assert rule.from_flags == FLAG_CONTROL
-        assert rule.to_flags == FLAG_COMMAND
+    assert len(rs) == 1
+    assert rs.watches_all_keys()
+    assert rs.keycodes() == frozenset(), "a wildcard names no specific keycode"
+    assert rs.rules[0].from_flags == FLAG_CONTROL
+    assert rs.rules[0].to_flags == FLAG_COMMAND
 
 
 def test_modifier_aliases_accepted():
@@ -63,6 +63,24 @@ def test_to_key_accepts_a_numeric_keycode():
         [{"key": "esc", "to_key": "0x32", "from": "control", "to": "command"}]
     )
     assert rs.rules[0].to_keycode == VK_GRAVE
+
+
+def test_any_key_builds_a_wildcard_rule():
+    rs = build_ruleset([{"key": "any", "from": "control", "to": "command"}])
+    assert rs.rules[0].keycode is None
+    assert rs.rules[0].matches_any_key
+    assert rs.rules[0].describe() == "ctrl+any -> cmd+any"
+
+
+def test_any_key_is_case_insensitive():
+    rs = build_ruleset([{"key": " ANY ", "from": "control", "to": "command"}])
+    assert rs.rules[0].keycode is None
+
+
+def test_any_key_rejects_to_key():
+    """Collapsing every key onto one is never what anyone means."""
+    with pytest.raises(ConfigError, match="cannot be combined with to_key"):
+        build_ruleset([{"key": "any", "to_key": "c", "from": "ctrl", "to": "cmd"}])
 
 
 def test_to_key_rejects_an_unknown_key():
@@ -126,7 +144,8 @@ def test_non_table_mapping_rejected():
 
 def test_missing_file_falls_back_to_defaults(tmp_path):
     cfg = load(tmp_path / "nope.toml")
-    assert len(cfg.ruleset) == 5
+    assert len(cfg.ruleset) == 1
+    assert cfg.ruleset.watches_all_keys()
     assert cfg.source_filter == "nomachine"
 
 
@@ -166,24 +185,21 @@ def test_invalid_toml_reports_path(tmp_path):
 
 
 def test_shipped_config_is_valid():
-    """The config.toml we ship must parse and produce the intended 11 rules."""
+    """The config.toml we ship must parse and produce the intended 3 rules.
+
+    Order is asserted, not just membership: the catch-all has to come last or it
+    would shadow the two specific rules above it.
+    """
     cfg = load()
-    assert len(cfg.ruleset) == 11
+    assert len(cfg.ruleset) == 3
     assert cfg.source_filter == "nomachine"
     assert isinstance(cfg.ruleset, Ruleset)
-    assert {rule.describe() for rule in cfg.ruleset.rules} == {
-        "ctrl+c -> cmd+c",
-        "ctrl+v -> cmd+v",
-        "ctrl+a -> cmd+a",
-        "ctrl+z -> cmd+z",
-        "ctrl+x -> cmd+x",
-        "ctrl+s -> cmd+s",
-        "ctrl+n -> cmd+n",
-        "ctrl+t -> cmd+t",
-        "shift+space -> cmd+space",
-        "ctrl+tab -> cmd+tab",
+    assert [rule.describe() for rule in cfg.ruleset.rules] == [
         "ctrl+esc -> cmd+`",
-    }
+        "shift+space -> cmd+space",
+        "ctrl+any -> cmd+any",
+    ]
+    assert cfg.ruleset.watches_all_keys()
     assert cfg.pause_hotkey is not None
     assert cfg.pause_hotkey.describe() == "shift+ctrl+opt+p"
 

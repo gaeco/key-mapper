@@ -64,12 +64,15 @@ class Remapper:
         self.pause_hotkey = pause_hotkey
 
         # Precomputed so the hot path can reject most events with one set lookup.
+        # A wildcard rule means there is nothing to reject, and every key event
+        # has to go through the ruleset instead.
         self._watched_keycodes = ruleset.keycodes()
+        self._watch_all_keys = ruleset.watches_all_keys()
 
         self.paused = False
         self.remapped = 0
         self.skipped_source = 0
-        self.skipped_paused = 0
+        self.paused_events = 0
         self.toggles = 0
         self.tap_reenables = 0
 
@@ -142,11 +145,10 @@ class Remapper:
                 return self._toggle(event_type, event)
 
         if self.paused:
-            if keycode in self._watched_keycodes:
-                self.skipped_paused += 1
+            self.paused_events += 1
             return event
 
-        if keycode not in self._watched_keycodes:
+        if not self._watch_all_keys and keycode not in self._watched_keycodes:
             return event
 
         flags = Quartz.CGEventGetFlags(event)
@@ -293,7 +295,7 @@ class Remapper:
             f"\nstopped ({reason}) after {elapsed:.0f}s -- "
             f"remapped={self.remapped} "
             f"skipped_wrong_source={self.skipped_source} "
-            f"skipped_while_paused={self.skipped_paused} "
+            f"key_events_while_paused={self.paused_events} "
             f"pause_toggles={self.toggles} "
             f"tap_reenables={self.tap_reenables}",
             file=sys.stderr,

@@ -37,86 +37,47 @@ strict_modifiers = false
 key = "p"
 modifiers = ["control", "option", "shift"]
 
-# The mappings. Each rewrites the modifier while keeping the same key.
-# Ctrl+<key> pressed on the NoMachine client arrives at macOS as Cmd+<key>.
+# The mappings, in priority order: the first rule that matches an event wins, so
+# every specific rule has to come before the catch-all at the bottom.
 #
-# Delete or comment out any line you don't want. Note that a converted key loses
-# its terminal meaning for the remote client: Ctrl+C no longer sends SIGINT and
-# Ctrl+Z no longer suspends, since macOS now sees Cmd+C / Cmd+Z. Drop those two
-# entries if you need them inside a shell.
-[[mapping]]
-key = "c"
-from = "control"
-to = "command"
-
-[[mapping]]
-key = "v"
-from = "control"
-to = "command"
-
-[[mapping]]
-key = "a"
-from = "control"
-to = "command"
-
-[[mapping]]
-key = "z"
-from = "control"
-to = "command"
-
-[[mapping]]
-key = "x"
-from = "control"
-to = "command"
-
-[[mapping]]
-key = "s"
-from = "control"
-to = "command"
-
-[[mapping]]
-key = "n"
-from = "control"
-to = "command"
-
-[[mapping]]
-key = "t"
-from = "control"
-to = "command"
-
-# Shift+Space -> Cmd+Space, the odd one out: every other rule here is Ctrl->Cmd.
-# Note that Shift+Space is an ordinary keystroke in a way Ctrl+Space is not -- it
-# types a space in most apps and pages up in a browser -- and that with
-# strict_modifiers = false, Ctrl+Shift+Space and Opt+Shift+Space convert too. Add
-# `strict = true` to this entry to fire on exactly Shift+Space and nothing else.
-[[mapping]]
-key = "space"
-from = "shift"
-to = "command"
-
-# Ctrl+Tab -> Cmd+Tab, so Ctrl+Tab reaches the macOS app switcher.
-#
-# Caveat, and it is the sharpest one in this file: the modifier physically held is
-# still Control. flagsChanged is passed through unmodified by design (see
-# remap.py), so nothing ever reports Command as down. The app switcher is exactly
-# the kind of UI that cares -- it stays open while Command is held and commits
-# when it is released -- so holding Ctrl and tapping Tab repeatedly is not
-# equivalent to holding a real Cmd. Each tap arrives as its own Cmd+Tab, which
-# tends to toggle between the last two apps rather than walk down the list.
-#
-# Ctrl+Shift+Tab converts too, keeping its Shift.
-[[mapping]]
-key = "tab"
-from = "control"
-to = "command"
-
 # Ctrl+Esc -> Cmd+` (macOS "move focus to next window"). The only rule that
-# changes the key as well as the modifier, via `to_key`; the others send the key
-# they matched. Only the keycode is rewritten, not the event's unicode payload,
-# so an app matching the shortcut on the keycode sees Cmd+` while one reading
-# characters would still read an escape.
+# changes the key as well as the modifier, via `to_key`. It has to sit above the
+# catch-all, which would otherwise turn this into a plain Cmd+Esc. Only the
+# keycode is rewritten, not the event's unicode payload, so an app matching the
+# shortcut on the keycode sees Cmd+` while one reading characters reads an escape.
 [[mapping]]
 key = "esc"
 to_key = "`"
 from = "control"
 to = "command"
+
+# Shift+Space -> Cmd+Space. Unaffected by the catch-all below, which only fires
+# on Control. Note that Shift+Space is an ordinary keystroke in a way Ctrl+Space
+# is not -- it types a space in most apps and pages up in a browser -- and that
+# with strict_modifiers = false, Ctrl+Shift+Space and Opt+Shift+Space convert
+# too. Add `strict = true` to fire on exactly Shift+Space and nothing else.
+[[mapping]]
+key = "space"
+from = "shift"
+to = "command"
+
+# The catch-all: every Ctrl+<key> becomes Cmd+<key>. `key = "any"` matches every
+# keycode, so this replaces the per-key list this file used to carry -- there is
+# no key to forget, and no entry to add when you want a new one.
+#
+# Consequence, and it is a large one: the *entire* Control layer is gone for the
+# remote client, not just the handful of chords that have a Cmd equivalent. In a
+# shell that means Ctrl+C no longer interrupts, Ctrl+D no longer sends EOF, and
+# Ctrl+A/E/K/L/R/U/W no longer reach readline. The pause hotkey above is how you
+# get them back for as long as you need them; it is matched before any rule, so
+# it keeps working while paused.
+#
+# Also unchanged by this rule: flagsChanged events are passed through, so what is
+# physically held is still Control. Shortcuts that need Command genuinely held --
+# the Cmd+Tab app switcher staying open to cycle -- do not behave as they would
+# with a real Cmd.
+[[mapping]]
+key = "any"
+from = "control"
+to = "command"
+

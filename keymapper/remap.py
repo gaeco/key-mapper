@@ -47,7 +47,9 @@ class Rule:
     """Rewrite `from_flags` to `to_flags` on a given key.
 
     Args:
-        keycode: virtual keycode the rule applies to.
+        keycode: virtual keycode the rule applies to, or None to match every
+            key -- which is how "convert the whole Control layer" is expressed
+            as one rule rather than one per key.
         from_flags: modifier bits that must be present to match.
         to_flags: modifier bits to substitute them with.
         strict: when True the chord must carry *exactly* `from_flags` (ignoring
@@ -60,14 +62,18 @@ class Rule:
             on the other side, such as Ctrl+Esc -> Cmd+`.
     """
 
-    keycode: int
+    keycode: int | None
     from_flags: int
     to_flags: int
     strict: bool = False
     to_keycode: int | None = None
 
+    @property
+    def matches_any_key(self) -> bool:
+        return self.keycode is None
+
     def matches(self, keycode: int, flags: int) -> bool:
-        if keycode != self.keycode:
+        if self.keycode is not None and keycode != self.keycode:
             return False
         if flags & self.from_flags != self.from_flags:
             return False
@@ -83,21 +89,24 @@ class Rule:
                 return False
         return True
 
-    @property
-    def target_keycode(self) -> int:
-        """The keycode this rule sends -- the original unless overridden."""
-        return self.keycode if self.to_keycode is None else self.to_keycode
+    def apply(self, keycode: int, flags: int) -> Change:
+        """The rewrite for an event that matched on `keycode`.
 
-    def apply(self, flags: int) -> Change:
+        The incoming keycode has to be passed in rather than read off the rule:
+        a wildcard rule has no keycode of its own, and passes through whichever
+        key it matched.
+        """
         return Change(
             flags=(flags & ~self.from_flags) | self.to_flags,
-            keycode=self.target_keycode,
+            keycode=keycode if self.to_keycode is None else self.to_keycode,
         )
 
     def describe(self) -> str:
+        source = "any" if self.keycode is None else key_name(self.keycode)
+        target = source if self.to_keycode is None else key_name(self.to_keycode)
         return (
-            f"{describe_flags(self.from_flags)}+{key_name(self.keycode)}"
-            f" -> {describe_flags(self.to_flags)}+{key_name(self.target_keycode)}"
+            f"{describe_flags(self.from_flags)}+{source}"
+            f" -> {describe_flags(self.to_flags)}+{target}"
         )
 
 
@@ -145,7 +154,7 @@ class Ruleset:
             return None
         for rule in self.rules:
             if rule.matches(keycode, flags):
-                change = rule.apply(flags)
+                change = rule.apply(keycode, flags)
                 # A rule that would change nothing is not worth a log line.
                 return change if change != Change(flags, keycode) else None
         return None
@@ -160,8 +169,18 @@ class Ruleset:
         return None
 
     def keycodes(self) -> frozenset[int]:
-        """Every keycode any rule cares about; lets the tap bail out early."""
-        return frozenset(rule.keycode for rule in self.rules)
+        """Keycodes the specific rules name; lets the tap bail out early.
+
+        Wildcard rules contribute nothing here, so this set is only a valid
+        early-out when `watches_all_keys()` is False.
+        """
+        return frozenset(
+            rule.keycode for rule in self.rules if rule.keycode is not None
+        )
+
+    def watches_all_keys(self) -> bool:
+        """Whether any rule is a wildcard, which defeats the keycode early-out."""
+        return any(rule.matches_any_key for rule in self.rules)
 
     def __len__(self) -> int:
         return len(self.rules)

@@ -10,10 +10,12 @@ from .remap import Hotkey, Rule, Ruleset
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.toml"
 
-#: Used when no config file exists, so the tool works out of the box.
-DEFAULT_MAPPINGS = [
-    {"key": key, "from": "control", "to": "command"} for key in ("c", "v", "a", "z", "x")
-]
+#: `key = "any"` in a [[mapping]] means "every key", not a key called "any".
+ANY_KEY = "any"
+
+#: Used when no config file exists, so the tool works out of the box: the whole
+#: Control layer becomes the Command layer.
+DEFAULT_MAPPINGS = [{"key": ANY_KEY, "from": "control", "to": "command"}]
 
 #: The pause toggle, used when config.toml has no [pause_hotkey] section.
 DEFAULT_PAUSE_HOTKEY = {
@@ -34,6 +36,13 @@ def _parse_modifier(value: str, where: str) -> int:
             f" Valid: {', '.join(sorted(set(FLAG_NAMES)))}"
         )
     return FLAG_NAMES[key]
+
+
+def _parse_key_or_any(value: str, where: str) -> int | None:
+    """Like `_parse_key`, but maps the literal "any" to None (every key)."""
+    if isinstance(value, str) and value.strip().lower() == ANY_KEY:
+        return None
+    return _parse_key(value, where)
 
 
 def _parse_key(value: str, where: str) -> int:
@@ -115,10 +124,16 @@ def build_ruleset(mappings: list[dict], strict: bool = False) -> Ruleset:
         to_flags = _parse_modifier(entry["to"], where)
         if from_flags == to_flags:
             raise ConfigError(f"{where}: 'from' and 'to' are the same modifier")
+        keycode = _parse_key_or_any(entry["key"], where)
         to_key = entry.get("to_key")
+        if keycode is None and to_key is not None:
+            raise ConfigError(
+                f'{where}: key = "{ANY_KEY}" cannot be combined with to_key --'
+                " that would collapse every key onto one"
+            )
         rules.append(
             Rule(
-                keycode=_parse_key(entry["key"], where),
+                keycode=keycode,
                 from_flags=from_flags,
                 to_flags=to_flags,
                 strict=bool(entry.get("strict", strict)),
