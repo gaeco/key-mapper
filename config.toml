@@ -38,19 +38,9 @@ key = "p"
 modifiers = ["control", "option", "shift"]
 
 # The mappings, in priority order: the first rule that matches an event wins, so
-# every specific rule has to come before the catch-all at the bottom.
+# any rule carving an exception out of the Control layer has to be written above
+# the catch-all at the bottom, which would otherwise match first.
 #
-# Ctrl+Esc -> Cmd+` (macOS "move focus to next window"). The only rule that
-# changes the key as well as the modifier, via `to_key`. It has to sit above the
-# catch-all, which would otherwise turn this into a plain Cmd+Esc. Only the
-# keycode is rewritten, not the event's unicode payload, so an app matching the
-# shortcut on the keycode sees Cmd+` while one reading characters reads an escape.
-[[mapping]]
-key = "esc"
-to_key = "`"
-from = "control"
-to = "command"
-
 # Shift+Space -> Cmd+Space. Unaffected by the catch-all below, which only fires
 # on Control. Note that Shift+Space is an ordinary keystroke in a way Ctrl+Space
 # is not -- it types a space in most apps and pages up in a browser -- and that

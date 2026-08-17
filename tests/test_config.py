@@ -185,17 +185,16 @@ def test_invalid_toml_reports_path(tmp_path):
 
 
 def test_shipped_config_is_valid():
-    """The config.toml we ship must parse and produce the intended 3 rules.
+    """The config.toml we ship must parse and produce the intended 2 rules.
 
-    Order is asserted, not just membership: the catch-all has to come last or it
-    would shadow the two specific rules above it.
+    Order is asserted, not just membership: the catch-all has to come last, so
+    that anything written above it can carve an exception out of it.
     """
     cfg = load()
-    assert len(cfg.ruleset) == 3
+    assert len(cfg.ruleset) == 2
     assert cfg.source_filter == "nomachine"
     assert isinstance(cfg.ruleset, Ruleset)
     assert [rule.describe() for rule in cfg.ruleset.rules] == [
-        "ctrl+esc -> cmd+`",
         "shift+space -> cmd+space",
         "ctrl+any -> cmd+any",
     ]
