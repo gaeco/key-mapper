@@ -1,6 +1,6 @@
 # key-mapper
 
-Remap `Ctrl+C/V/A/Z/X` to `Cmd+C/V/A/Z/X` on macOS, for keystrokes arriving from
+Remap `Ctrl+any key` to `Cmd+any key` on macOS, for keystrokes arriving from
 a **NoMachine** client — leaving the Mac's own keyboard untouched.
 
 So pressing `Ctrl+C` on the client keyboard produces a `Cmd+C` event on macOS,
@@ -67,10 +67,10 @@ and both `probe` and `run` refuse to start without it.
 ## Usage
 
 ```sh
-keymapper doctor                # permissions, NoMachine processes, config, conflicts
-keymapper probe                 # see raw events and where they came from
-keymapper run --dry-run         # log what would change, modify nothing
-keymapper run                   # the real thing
+./.venv/bin/keymapper doctor                # permissions, NoMachine processes, config, conflicts
+./.venv/bin/keymapper probe                 # see raw events and where they came from
+./.venv/bin/keymapper run --dry-run         # log what would change, modify nothing
+./.venv/bin/keymapper run                   # the real thing
 ```
 
 ### `probe` — do this before trusting anything
