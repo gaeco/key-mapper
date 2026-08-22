@@ -60,6 +60,12 @@ class Rule:
             Most rules keep it: a modifier swap is all that Ctrl+C -> Cmd+C
             needs. Rewriting the key as well is for chords with no counterpart
             on the other side, such as Ctrl+Esc -> Cmd+`.
+        allow_all_sources: when True this rule ignores `source_filter` entirely
+            and fires whatever posted the event -- the local MacBook keyboard as
+            well as the NoMachine client. Per-rule rather than global because the
+            two kinds of rule want opposite answers: the Control catch-all must
+            stay remote-only or the local shell loses Ctrl+C, while a chord you
+            want everywhere should not be hostage to that.
     """
 
     keycode: int | None
@@ -67,6 +73,7 @@ class Rule:
     to_flags: int
     strict: bool = False
     to_keycode: int | None = None
+    allow_all_sources: bool = False
 
     @property
     def matches_any_key(self) -> bool:
@@ -104,9 +111,13 @@ class Rule:
     def describe(self) -> str:
         source = "any" if self.keycode is None else key_name(self.keycode)
         target = source if self.to_keycode is None else key_name(self.to_keycode)
+        # The source scope is part of what the rule does, so it belongs in the
+        # one-line description the startup banner and `doctor` both print --
+        # otherwise two rules that behave very differently look identical there.
+        scope = " (any source)" if self.allow_all_sources else ""
         return (
             f"{describe_flags(self.from_flags)}+{source}"
-            f" -> {describe_flags(self.to_flags)}+{target}"
+            f" -> {describe_flags(self.to_flags)}+{target}{scope}"
         )
 
 
@@ -143,8 +154,14 @@ class Ruleset:
     def __init__(self, rules: list[Rule]) -> None:
         self.rules = rules
 
-    def decide(self, event_type: int, keycode: int, flags: int) -> Change | None:
-        """Return the rewrite to apply, or None to leave the event untouched.
+    def resolve(
+        self, event_type: int, keycode: int, flags: int
+    ) -> tuple[Rule, Change] | None:
+        """The winning rule and its rewrite, or None to leave the event alone.
+
+        Returns both halves because the tap needs both: the change to apply, and
+        the rule itself to know whether `allow_all_sources` exempts it from the
+        source filter. One scan of the rules rather than two on the hot path.
 
         `flagsChanged` events are never rewritten. Converting the Control key's
         own press/release would turn Control into Command globally rather than
@@ -156,8 +173,17 @@ class Ruleset:
             if rule.matches(keycode, flags):
                 change = rule.apply(keycode, flags)
                 # A rule that would change nothing is not worth a log line.
-                return change if change != Change(flags, keycode) else None
+                # First match wins, so a no-op match stops the search rather
+                # than falling through to a later rule.
+                if change == Change(flags, keycode):
+                    return None
+                return rule, change
         return None
+
+    def decide(self, event_type: int, keycode: int, flags: int) -> Change | None:
+        """Return the rewrite to apply, or None to leave the event untouched."""
+        resolved = self.resolve(event_type, keycode, flags)
+        return None if resolved is None else resolved[1]
 
     def matching_rule(self, event_type: int, keycode: int, flags: int) -> Rule | None:
         """Like `decide`, but returns the rule -- used for log messages."""

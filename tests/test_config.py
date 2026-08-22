@@ -100,6 +100,31 @@ def test_global_strict_applies_to_all():
     assert all(r.strict for r in rs.rules)
 
 
+def test_all_sources_defaults_to_off():
+    """Rules obey source_filter unless they say otherwise."""
+    rs = build_ruleset([{"key": "c", "from": "control", "to": "command"}])
+    assert rs.rules[0].allow_all_sources is False
+
+
+def test_all_sources_opts_a_rule_out_of_the_filter():
+    rs = build_ruleset(
+        [{"key": "space", "from": "shift", "to": "command", "all_sources": True}]
+    )
+    assert rs.rules[0].allow_all_sources is True
+    assert rs.rules[0].describe() == "shift+space -> cmd+space (any source)"
+
+
+def test_all_sources_is_per_rule():
+    """One rule opting out must not drag the others with it."""
+    rs = build_ruleset(
+        [
+            {"key": "space", "from": "shift", "to": "command", "all_sources": True},
+            {"key": "any", "from": "control", "to": "command"},
+        ]
+    )
+    assert [r.allow_all_sources for r in rs.rules] == [True, False]
+
+
 # --- error cases ---------------------------------------------------------
 
 
@@ -195,10 +220,13 @@ def test_shipped_config_is_valid():
     assert cfg.source_filter == "nomachine"
     assert isinstance(cfg.ruleset, Ruleset)
     assert [rule.describe() for rule in cfg.ruleset.rules] == [
-        "shift+space -> cmd+space",
+        "shift+space -> cmd+space (any source)",
         "ctrl+any -> cmd+any",
     ]
     assert cfg.ruleset.watches_all_keys()
+    # Shift+Space is meant to work from the local keyboard too; the Control
+    # catch-all must stay remote-only or the local shell loses Ctrl+C.
+    assert [rule.allow_all_sources for rule in cfg.ruleset.rules] == [True, False]
     assert cfg.pause_hotkey is not None
     assert cfg.pause_hotkey.describe() == "shift+ctrl+opt+p"
 

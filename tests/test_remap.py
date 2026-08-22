@@ -154,8 +154,45 @@ def test_describe_is_readable():
     assert Rule(VK_C, FLAG_CONTROL, FLAG_COMMAND).describe() == "ctrl+c -> cmd+c"
 
 
+def test_describe_marks_a_rule_that_ignores_the_source_filter():
+    rule = Rule(VK_C, FLAG_CONTROL, FLAG_COMMAND, allow_all_sources=True)
+    assert rule.describe() == "ctrl+c -> cmd+c (any source)"
+
+
 def test_empty_ruleset_is_inert():
     assert Ruleset([]).decide(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL) is None
+
+
+# --- resolve: the rule the tap needs alongside the change -----------------
+
+
+def test_resolve_returns_both_the_rule_and_the_change():
+    rs = Ruleset([Rule(VK_C, FLAG_CONTROL, FLAG_COMMAND, allow_all_sources=True)])
+    resolved = rs.resolve(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL)
+    assert resolved is not None
+    rule, change = resolved
+    assert rule.allow_all_sources is True
+    assert change == Change(FLAG_COMMAND, VK_C)
+
+
+def test_resolve_agrees_with_decide():
+    """decide is a wrapper over resolve, and must stay one."""
+    rs = ctrl_to_cmd()
+    for keycode in MAPPED_KEYS + [VK_B]:
+        for flags in (0, FLAG_SHIFT, FLAG_CONTROL, FLAG_COMMAND):
+            resolved = rs.resolve(EVENT_KEY_DOWN, keycode, flags)
+            expected = None if resolved is None else resolved[1]
+            assert rs.decide(EVENT_KEY_DOWN, keycode, flags) == expected
+
+
+def test_resolve_ignores_flags_changed():
+    assert ctrl_to_cmd().resolve(EVENT_FLAGS_CHANGED, VK_C, FLAG_CONTROL) is None
+
+
+def test_resolve_returns_none_when_the_match_is_a_no_op():
+    """Matching a rule that changes nothing must not report a rewrite."""
+    rs = Ruleset([Rule(VK_C, FLAG_CONTROL, FLAG_COMMAND)])
+    assert rs.resolve(EVENT_KEY_DOWN, VK_C, FLAG_CONTROL | FLAG_COMMAND) is None
 
 
 # --- rewriting the key as well as the modifier ----------------------------

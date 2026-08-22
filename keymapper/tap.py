@@ -152,30 +152,34 @@ class Remapper:
             return event
 
         flags = Quartz.CGEventGetFlags(event)
-        change = self.ruleset.decide(event_type, keycode, flags)
-        if change is None:
+        resolved = self.ruleset.resolve(event_type, keycode, flags)
+        if resolved is None:
             return event
+        rule, change = resolved
 
         # Origin check is deferred until after the cheap checks pass, so the pid
-        # lookup only ever runs for the handful of keys we might rewrite.
-        source_pid = Quartz.CGEventGetIntegerValueField(
-            event, Quartz.kCGEventSourceUnixProcessID
-        )
-        source_state = Quartz.CGEventGetIntegerValueField(
-            event, Quartz.kCGEventSourceStateID
-        )
-        if not self.classifier.should_remap(source_pid, source_state):
-            self.skipped_source += 1
-            if self.verbose:
-                proc = self.classifier.describe_pid(source_pid) or "-"
-                print(
-                    f"  skip  {event_name(event_type):8} "
-                    f"{describe_flags(flags)}+{key_name(keycode)} "
-                    f"(source pid={source_pid} {proc.rsplit('/', 1)[-1]})",
-                    file=sys.stderr,
-                    flush=True,
-                )
-            return event
+        # lookup only ever runs for the handful of keys we might rewrite -- and
+        # is skipped entirely for a rule that opted out of the filter, which also
+        # spares it the pid lookup and its cache.
+        if not rule.allow_all_sources:
+            source_pid = Quartz.CGEventGetIntegerValueField(
+                event, Quartz.kCGEventSourceUnixProcessID
+            )
+            source_state = Quartz.CGEventGetIntegerValueField(
+                event, Quartz.kCGEventSourceStateID
+            )
+            if not self.classifier.should_remap(source_pid, source_state):
+                self.skipped_source += 1
+                if self.verbose:
+                    proc = self.classifier.describe_pid(source_pid) or "-"
+                    print(
+                        f"  skip  {event_name(event_type):8} "
+                        f"{describe_flags(flags)}+{key_name(keycode)} "
+                        f"(source pid={source_pid} {proc.rsplit('/', 1)[-1]})",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                return event
 
         self.remapped += 1
         arrow = "would remap" if self.dry_run else "remap"

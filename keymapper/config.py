@@ -140,6 +140,10 @@ def build_ruleset(mappings: list[dict], strict: bool = False) -> Ruleset:
                 to_keycode=(
                     None if to_key is None else _parse_key(to_key, f"{where} to_key")
                 ),
+                # Per-rule only, with no global counterpart: `source_filter = "all"`
+                # already says "every rule, every source", so a global default here
+                # would just be a second way to spell it.
+                allow_all_sources=bool(entry.get("all_sources", False)),
             )
         )
     if not rules:

@@ -123,6 +123,28 @@ Mappings are not restricted to Ctrl→Cmd: any modifier pair works, and swapping
 `from` and `to` reverses the direction. `to_key` additionally rewrites the key
 itself, so a chord with no counterpart on the other side can still be expressed.
 
+### Per-mapping keys
+
+- `strict` — overrides `strict_modifiers` for this rule alone
+- `to_key` — also rewrite the key, not just the modifier
+- `all_sources` — `false` (default). When `true`, the rule ignores `source_filter`
+  and fires whatever posted the event, so it works from the MacBook's own keyboard
+  as well as from the NoMachine client. Rules that set it are marked
+  `(any source)` in the startup banner and in `doctor`.
+
+`all_sources` is per-rule and has no global form on purpose: `source_filter = "all"`
+already means "every rule, every source". The two kinds of rule want opposite
+answers — the Control catch-all has to stay remote-only or the local shell loses
+`Ctrl+C`, while a chord you want everywhere should not be hostage to that. The
+shipped `Shift+Space → Cmd+Space` sets it; the catch-all does not.
+
+Costs, before you set it on something: the chord stops being typable locally.
+`Shift+Space` normally types a space, so with `all_sources` the local keyboard
+opens Spotlight instead whenever Shift is still held over the space — sloppy
+shifting mid-sentence is the usual way to hit it. `strict = true` narrows the rule
+to exactly `Shift+Space` but does not help with that case; the fix is to drop
+`all_sources` and keep the rule remote-only. The pause hotkey also covers it.
+
 ## Pausing
 
 `Ctrl+Opt+Shift+P` pauses all remapping; pressing it again resumes. While paused
@@ -148,8 +170,10 @@ know from Windows or Linux works in every Mac app.
 
 The pause hotkey is the intended escape hatch: `Ctrl+Opt+Shift+P` gives the whole
 Control layer back for as long as you need it. For a permanent exception, add a
-`[[mapping]]` above the catch-all. Local typing on the MacBook's own keyboard is
-unaffected while `source_filter = "nomachine"`.
+`[[mapping]]` above the catch-all. The local Control layer is unaffected while
+`source_filter = "nomachine"`, since the catch-all does not set `all_sources` —
+but rules that *do* set it, `Shift+Space → Cmd+Space` among them, apply to local
+typing as well.
 
 **`flagsChanged` events are passed through unmodified, by design.** Rewriting the
 Control key's own press/release would turn Control into Command *globally*,
