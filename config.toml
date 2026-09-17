@@ -62,6 +62,7 @@ key = "space"
 from = "shift"
 to = "command"
 all_sources = true
+strict = true
 
 # The catch-all: every Ctrl+<key> becomes Cmd+<key>. `key = "any"` matches every
 # keycode, so this replaces the per-key list this file used to carry -- there is
