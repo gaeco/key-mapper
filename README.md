@@ -136,13 +136,12 @@ itself, so a chord with no counterpart on the other side can still be expressed.
 already means "every rule, every source". The two kinds of rule want opposite
 answers — the Control catch-all has to stay remote-only or the local shell loses
 `Ctrl+C`, while a chord you want everywhere should not be hostage to that. The
-shipped `Shift+Space → Cmd+Space` sets it; the catch-all does not.
+shipped catch-all does not set it.
 
 Costs, before you set it on something: the chord stops being typable locally.
-`Shift+Space` normally types a space, so with `all_sources` the local keyboard
-opens Spotlight instead whenever Shift is still held over the space — sloppy
-shifting mid-sentence is the usual way to hit it. `strict = true` narrows the rule
-to exactly `Shift+Space` but does not help with that case; the fix is to drop
+A chord that normally does something on its own (`Shift+Space` types a space,
+for instance) will be rewritten on the local keyboard too. `strict = true`
+narrows a rule to exactly its chord; the fix for misfires is to drop
 `all_sources` and keep the rule remote-only. The pause hotkey also covers it.
 
 ## Pausing
@@ -172,8 +171,7 @@ The pause hotkey is the intended escape hatch: `Ctrl+Opt+Shift+P` gives the whol
 Control layer back for as long as you need it. For a permanent exception, add a
 `[[mapping]]` above the catch-all. The local Control layer is unaffected while
 `source_filter = "nomachine"`, since the catch-all does not set `all_sources` —
-but rules that *do* set it, `Shift+Space → Cmd+Space` among them, apply to local
-typing as well.
+but any rule that *does* set it applies to local typing as well.
 
 **`flagsChanged` events are passed through unmodified, by design.** Rewriting the
 Control key's own press/release would turn Control into Command *globally*,

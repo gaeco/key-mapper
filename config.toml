@@ -40,29 +40,6 @@ modifiers = ["control", "option", "shift"]
 # The mappings, in priority order: the first rule that matches an event wins, so
 # any rule carving an exception out of the Control layer has to be written above
 # the catch-all at the bottom, which would otherwise match first.
-#
-# Shift+Space -> Cmd+Space. Unaffected by the catch-all below, which only fires
-# on Control. Note that Shift+Space is an ordinary keystroke in a way Ctrl+Space
-# is not -- it types a space in most apps and pages up in a browser -- and that
-# with strict_modifiers = false, Ctrl+Shift+Space and Opt+Shift+Space convert
-# too. Add `strict = true` to fire on exactly Shift+Space and nothing else.
-#
-# `all_sources = true` exempts this one rule from source_filter above, so it fires
-# from the MacBook's own keyboard as well as from the NoMachine client. The
-# catch-all below keeps the filter, so the local Control layer is untouched.
-#
-# Worth knowing before this surprises you: the local keyboard now types no space
-# when Shift happens to still be held -- it opens Spotlight instead. Sloppy
-# shifting mid-sentence ("Hello_World" with Shift still down over the space) is
-# the usual way to trip it. `strict = true` narrows the rule to exactly
-# Shift+Space but does not help there; if it misfires, the fix is to drop
-# all_sources and keep this remote-only.
-[[mapping]]
-key = "space"
-from = "shift"
-to = "command"
-all_sources = true
-strict = true
 
 # The catch-all: every Ctrl+<key> becomes Cmd+<key>. `key = "any"` matches every
 # keycode, so this replaces the per-key list this file used to carry -- there is

@@ -210,23 +210,17 @@ def test_invalid_toml_reports_path(tmp_path):
 
 
 def test_shipped_config_is_valid():
-    """The config.toml we ship must parse and produce the intended 2 rules.
-
-    Order is asserted, not just membership: the catch-all has to come last, so
-    that anything written above it can carve an exception out of it.
-    """
+    """The config.toml we ship must parse and produce the intended rule."""
     cfg = load()
-    assert len(cfg.ruleset) == 2
+    assert len(cfg.ruleset) == 1
     assert cfg.source_filter == "nomachine"
     assert isinstance(cfg.ruleset, Ruleset)
     assert [rule.describe() for rule in cfg.ruleset.rules] == [
-        "shift+space -> cmd+space (any source)",
         "ctrl+any -> cmd+any",
     ]
     assert cfg.ruleset.watches_all_keys()
-    # Shift+Space is meant to work from the local keyboard too; the Control
-    # catch-all must stay remote-only or the local shell loses Ctrl+C.
-    assert [rule.allow_all_sources for rule in cfg.ruleset.rules] == [True, False]
+    # The Control catch-all must stay remote-only or the local shell loses Ctrl+C.
+    assert [rule.allow_all_sources for rule in cfg.ruleset.rules] == [False]
     assert cfg.pause_hotkey is not None
     assert cfg.pause_hotkey.describe() == "shift+ctrl+opt+p"
 
